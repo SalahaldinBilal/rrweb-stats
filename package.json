@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "require": "^2.4.20",
     "rrweb": "^0.9.14"
   }
 }
