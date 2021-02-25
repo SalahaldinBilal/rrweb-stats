@@ -1,0 +1,20 @@
+.container {
+    height: 100vh;
+    display: flex;
+}
+
+.iframe-container {
+    height: 100%;
+    width: 80%;
+    display: inline-block;
+}
+
+.data-display {
+    flex: 1;
+    display: inline-block;
+    background-color: lightgray;
+}
+
+.showing-data {
+    border: 2px blue solid !important;
+}
