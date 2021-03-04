@@ -12,7 +12,8 @@ var dp;
 fetch("/src/data/recordings.json")
     .then(response => response.json())
     .then(json => {
-        dp = new rrwebDataMiner({sessions:json});
+        dp = new rrwebDataMiner(json);
+        dp.calculateStatstics();
         let iframe = document.getElementsByTagName("iframe")[0];
         let map = rebuild(dp.getSnapshot, {doc:iframe.contentDocument})[1];
         let head = iframe.contentDocument.getElementsByTagName("head")[0];
@@ -27,7 +28,7 @@ fetch("/src/data/recordings.json")
             map[leaf].addEventListener("mouseleave", () => {
                 map[leaf].classList.remove("showing-data");
             });
-        }            
-        console.log(dp.speeds);
+        }     
+        console.log(dp.getThrashingInfoOfSessionMovements(3, 3000));
     })
     //code was run on a local server using local-server package in node

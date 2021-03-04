@@ -18,33 +18,25 @@ const eventTypes = {};
 })(eventTypes);
 
 class rrwebDataMiner{
-    constructor(config){
+    constructor(sessions, leafTypes){
         
-        this.defaultConfig = {
-            sessions : null,
-            leafTypes : [
-                "input",
-                "button",
-                "a"
-            ]
-        }
+        this.sessions = [];
+
+        if(sessions) this.addSessions(sessions, false);
+
+        this.leafTypes = leafTypes || ["input", "button", "a"];
         
-        this.config = {...this.defaultConfig, ...config}
-        
-        if(!this.config.sessions || this.config.sessions.length === 0) throw new Error('Events must be provided at initlization');
-        
-        this.snapshot = this.config.sessions[0][3].data.node;
-        this.leaves = this._findLeaves();
-        this.organizedEvents = Array(this.config.sessions.length).fill().map(() => ({}));
-        this.movementSpeeds = [];
-        this._organizeEvents();
+        this.leaves = null;
+        this.parsedData = {}
+
+    }
+
+    _clearParsedData(){
         this.parsedData = {}
 
         this.leaves.forEach(leaf => {
             this.parsedData[leaf] = {clicks:0, hovers:0, hoverAndClick:0, visitorClicks:0, clickTimes:[], hoverTimes:[], hoverToClickTimes:[], hoverDurTimes:[]};
         })
-        
-        this._parseEvents();
     }
 
     _calculateOverLeaves(formula){
@@ -53,43 +45,94 @@ class rrwebDataMiner{
         return result;
     }
 
-    _parseEvents(){
-        for(let si = 0, session = this.organizedEvents[si]; si < Object.keys(this.organizedEvents).length; si++, session = this.organizedEvents[si]){
-            let startTime;
-            let alreadyClicked = [], alreadyHoverd = [];
-            let lastEvent, lastMouseEnter;
-            for(let key in session){
-                let event = session[key];
-                if(event.type == eventTypes.mouseEnter) {
-                    this.parsedData[event.id].hovers++;
-                    if(!alreadyHoverd.includes(event.id)){
-                        this.parsedData[event.id].hoverTimes.push(calculateTimeDifference(startTime, key));
-                        alreadyHoverd.push(event.id);
-                    }
+    _parseSessionEvents(organizedSession){
+        let startTime;
+        let alreadyClicked = [], alreadyHoverd = [];
+        let lastEvent, lastMouseEnter;
+        for(let key in organizedSession){
+            let event = organizedSession[key];
+            if(event.type == eventTypes.mouseEnter) {
+                this.parsedData[event.id].hovers++;
+                if(!alreadyHoverd.includes(event.id)){
+                    this.parsedData[event.id].hoverTimes.push(calculateTimeDifference(startTime, key));
+                    alreadyHoverd.push(event.id);
                 }
-                else if(event.type == eventTypes.click){
-                    this.parsedData[event.id].clicks++;
-                    if(lastEvent.event.type == eventTypes.mouseEnter) {
-                        this.parsedData[event.id].hoverAndClick++;
-                        this.parsedData[event.id].hoverToClickTimes.push(calculateTimeDifference(lastEvent.timestamp, key));
-                        if(!alreadyClicked.includes(event.id)){
-                            this.parsedData[event.id].clickTimes.push(calculateTimeDifference(startTime, key));
-                            this.parsedData[event.id].visitorClicks++
-                            alreadyClicked.push(event.id);
-                        }
-                    }
-                }
-                else if(event.type == eventTypes.mouseLeave){
-                    this.parsedData[event.id].hoverDurTimes.push(calculateTimeDifference(lastMouseEnter.timestamp, key));
-                }else if(event.type == 0) startTime = key;
-
-                lastEvent = {event:session[key], timestamp:key};
-                lastMouseEnter = event.type == eventTypes.mouseEnter ? {event:session[key], timestamp:key} : lastMouseEnter;
             }
+            else if(event.type == eventTypes.click){
+                this.parsedData[event.id].clicks++;
+                if(lastEvent.event.type == eventTypes.mouseEnter) {
+                    this.parsedData[event.id].hoverAndClick++;
+                    this.parsedData[event.id].hoverToClickTimes.push(calculateTimeDifference(lastEvent.timestamp, key));
+                    if(!alreadyClicked.includes(event.id)){
+                        this.parsedData[event.id].clickTimes.push(calculateTimeDifference(startTime, key));
+                        this.parsedData[event.id].visitorClicks++
+                        alreadyClicked.push(event.id);
+                    }
+                }
+            }
+            else if(event.type == eventTypes.mouseLeave){
+                this.parsedData[event.id].hoverDurTimes.push(calculateTimeDifference(lastMouseEnter.timestamp, key));
+            }else if(event.type == 0) startTime = key;
+            lastEvent = {event:organizedSession[key], timestamp:key};
+            lastMouseEnter = event.type == eventTypes.mouseEnter ? {event:organizedSession[key], timestamp:key} : lastMouseEnter;
         }
     }
 
-    _organizeEvents(){
+    _parseSessionsEvents(organizedEvents){
+        for(let si = 0, session = organizedEvents[si]; si < organizedEvents.length; si++, session = organizedEvents[si]){
+            this._parseSessionEvents(session);
+        }
+    }
+
+    _organizeSessionEvents(session){
+        let organizedEvents = {};
+        organizedEvents[session[3].timestamp] = {type:eventTypes.documentLoad};
+        let lastHover = {id:-1, timestamp:-1}
+
+        for(const event of session){
+            if(event.data.source == IncrementalSource.MouseInteraction && event.data.type == MouseInteractions.Click && this.leaves.includes(event.data.id)) organizedEvents[event.timestamp] = {id:event.data.id, type:eventTypes.click};
+            else if(event.data.source == IncrementalSource.MouseMove){
+                event.data.positions.forEach(pos => {
+                    if(lastHover.id != pos.id){
+                        if(this.leaves.includes(lastHover.id)) organizedEvents[event.timestamp + pos.timeOffset] = {id:lastHover.id, type:eventTypes.mouseLeave};
+                        if(this.leaves.includes(pos.id)) organizedEvents[ organizedEvents[event.timestamp + pos.timeOffset] ? event.timestamp + pos.timeOffset : event.timestamp + pos.timeOffset] = {id:pos.id, type:eventTypes.mouseEnter};
+                        lastHover.id = pos.id;
+                        lastHover.timestamp = event.timestamp + pos.timeOffset;
+                    }
+                });
+            }
+        }
+
+        organizedEvents = sortObject(organizedEvents);
+
+        return organizedEvents;
+    }
+
+    _organizeSessionsEvents(){
+        let organizedSessionsEvents = [];
+        for(const session of this.sessions) organizedSessionsEvents.push(this._organizeSessionEvents(session));
+        return organizedSessionsEvents;
+    }
+
+    _findLeaves(){
+        let leaves = [];
+        let _this = this;
+
+        function areChildrenOnlyTextNodes(node){
+            for(const child of node.childNodes) if(child.tagName) return false;
+            return true;
+        }
+    
+        function findLeavesRecursive(node){
+            if(node.childNodes && node.childNodes.length > 0 && !areChildrenOnlyTextNodes(node)) node.childNodes.forEach( e => findLeavesRecursive(e));
+            else if(node.tagName && _this.leafTypes.includes(node.tagName)) leaves.push(node.id);
+        }
+    
+        findLeavesRecursive(this.getSnapshot);
+        return leaves;
+    }
+
+    getMovementIntervals(){
         function getMovementSpeed(movementEvent) {
             function calculateDistance(x1, y1, x2 ,y2){
                 return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
@@ -118,25 +161,14 @@ class rrwebDataMiner{
             } : {speed:0, start:0, end:0};
         }
 
-      //  let speeds = [];
-        for(let si = 0, session = this.config.sessions[si]; si < this.config.sessions.length; si++, session = this.config.sessions[si]){
-            let curData = this.organizedEvents[si];
-            curData[session[3].timestamp] = {type:eventTypes.documentLoad};
-            let lastHover = {id:-1, timestamp:-1};
+        let movementSpeeds = [];
+
+        for(const session of this.sessions){
             let lastMovement = null;
             let tempMove = [];
             let sessionMoves = [];
-            for(let i = 4, event = session[4]; i < session.length; i++, event = session[i]){
-                if(event.data.source == IncrementalSource.MouseInteraction && event.data.type == MouseInteractions.Click && this.leaves.includes(event.data.id)) {curData[event.timestamp] = {id:event.data.id, type:eventTypes.click};}
-                else if(event.data.source == IncrementalSource.MouseMove){
-                    event.data.positions.forEach(pos => {
-                        if(lastHover.id != pos.id){
-                            if(this.leaves.includes(lastHover.id)) curData[event.timestamp + pos.timeOffset] = {id:lastHover.id, type:eventTypes.mouseLeave};
-                            if(this.leaves.includes(pos.id)) curData[ curData[event.timestamp + pos.timeOffset] ? event.timestamp + pos.timeOffset : event.timestamp + pos.timeOffset] = {id:pos.id, type:eventTypes.mouseEnter};
-                            lastHover.id = pos.id;
-                            lastHover.timestamp = event.timestamp + pos.timeOffset;
-                        }
-                    });
+            for(const event of session){
+                if(event.data.source == IncrementalSource.MouseMove){
                     if (lastMovement != null){
                         let result = getMovementSpeed(event);
                         if(result.speed) tempMove.push(result);
@@ -146,66 +178,98 @@ class rrwebDataMiner{
                 if(event.data.source == IncrementalSource.MouseInteraction){
                     if(tempMove.length > 0){ 
                         sessionMoves.push(tempMove); 
-                        //speeds.push(...tempMove)
                     }
                     tempMove = [];
                 }
             }
-            this.movementSpeeds.push(sessionMoves.length ? sessionMoves : [tempMove]);
-            //if(!sessionMoves.length) speeds.push(...tempMove);
-            this.organizedEvents[si] = sortObject(this.organizedEvents[si]);
-            /*this.temp["mean"] = Stats.mean(speeds, e => e.speed);
-            this.temp["std"] = Stats.standardDeviation(speeds, null, e => e.speed);
-            this.thrashing = this.movementSpeeds.map(e => e.map(a => Stats.mean(a, a=>a.speed) > Stats.mean(speeds, e => e.speed)).includes(true))*/
+            movementSpeeds.push(sessionMoves.length ? sessionMoves : [tempMove]);
+        }
+
+        return movementSpeeds;
+    }
+
+    getClickIntervals(timeThreshold = 0.5){
+        let intervals = [];
+        
+        for(const session of this.sessions){
+            let lastClick = null;
+            let interval = [];
+            intervals.push([]);
+            
+            for(const event of session){
+                if(event.data.source == IncrementalSource.MouseInteraction && event.data.type == MouseInteractions.Click){
+                    if(lastClick && calculateTimeDifference(lastClick.timestamp, event.timestamp) <= timeThreshold) {
+                        if(interval.length === 0) interval.push(lastClick)
+                        interval.push(event);
+                        lastClick = event;
+                    }
+                    else if(interval.length > 0){
+                        intervals[intervals.length - 1].push(interval);
+                        interval = [];
+                    }
+                    lastClick = event;
+                }
+            }
+
+            if(interval.length > 0) intervals[intervals.length - 1].push(interval);
+        }
+
+        return intervals;
+    }
+
+    getThrashingInfoOfMovInterval(movements, winSize, threshold) {
+        if(movements.length >= winSize){
+            var maxTrashingProbability = -1;
+            var thrashingPeriod = [];
+
+            for(let i = 0; i < movements.length; ++i) {
+                var sum = 0;
+                for (let j = i; j < movements.length && j-i < winSize; j++) {
+                    var relSpeed = movements[j].speed / threshold;
+                    var sigmoid = 1 / (1 + Math.exp(-Math.pow(relSpeed, 3)));
+                    sum += sigmoid;
+                }
+                var avgSigmoid = (sum / winSize);
+                if(avgSigmoid > 0.6) thrashingPeriod.push(movements[i]);
+                if(maxTrashingProbability < avgSigmoid) maxTrashingProbability = avgSigmoid;
+            }
+            return {"thrashingProbability": maxTrashingProbability, "thrashingPeriod": thrashingPeriod} ;
+        }
+        return {"thrashingProbability": 0, "thrashingPeriod": null};
+    }
+
+    getThrashingInfoOfSessionMovements(winSize, threshold){
+        let sessions = this.getMovementIntervals();
+        let sessionsThrashings = [];
+        for(const session of sessions){
+            let sessionThrashings = [];
+            for(const movement of session){
+                sessionThrashings.push(this.getThrashingInfoOfMovInterval(movement, winSize, threshold));
+            }
+            sessionsThrashings.push(sessionThrashings);
+        }
+        return sessionsThrashings;
+    }
+
+    addSession(session, updateStats = true){
+        this.sessions.push(session);
+        if(updateStats) this._parseSessionEvents(this._organizeSessionEvents(session));
+    }
+
+    addSessions(sessions, updateStats = true){
+        for(const session of sessions){
+            this.addSession(session, updateStats);
         }
     }
 
-    _findLeaves(){
-        let leaves = [];
-        let _this = this;
-
-        function areChildrenOnlyTextNodes(node){
-            for(let index in node.childNodes) if(node.childNodes[index].tagName) return false;
-            return true;
-        }
-    
-        function findLeavesRecursive(node){
-            if(node.childNodes && node.childNodes.length > 0 && !areChildrenOnlyTextNodes(node)) node.childNodes.forEach( e => findLeavesRecursive(e));
-            else if(node.tagName && _this.config.leafTypes.includes(node.tagName)) leaves.push(node.id);
-        }
-    
-        findLeavesRecursive(this.snapshot);
-        return leaves;
+    calculateStatstics(){
+        this.leaves = this._findLeaves();
+        this._clearParsedData()
+        this._parseSessionsEvents(this._organizeSessionsEvents(this.sessions));
     }
-
-
 
     get getLeaves(){
         return this.leaves;
-    }
-
-    get hoverToClickRate(){
-        return this._calculateOverLeaves(leaf => +(this.parsedData[leaf].hoverAndClick / this.parsedData[leaf].hovers * 100).toPrecision(2));
-    }
-
-    get visitorClickRate(){
-        return this._calculateOverLeaves(leaf => +(this.parsedData[leaf].visitorClicks / this.config.sessions.length * 100).toPrecision(2));
-    }
-
-    get timeBeforeClick() {
-        return this._calculateOverLeaves(leaf => +(Stats.mean(this.parsedData[leaf].clickTimes)).toPrecision(2));
-    }
-
-    get timeBeforeHover() {
-        return this._calculateOverLeaves(leaf => +(Stats.mean(this.parsedData[leaf].hoverTimes)).toPrecision(2));
-    }
-
-    get hoverToClickTime() {
-        return this._calculateOverLeaves(leaf => +(Stats.mean(this.parsedData[leaf].hoverToClickTimes)).toPrecision(2));
-    }
-
-    get averageHoverTime() {
-        return this._calculateOverLeaves(leaf => +(Stats.mean(this.parsedData[leaf].hoverDurTimes)).toPrecision(2));
     }
 
     get getParsedData(){
@@ -213,28 +277,11 @@ class rrwebDataMiner{
     }
 
     get getCalculatedData(){
-        let array = [
-            this.visitorClickRate,
-            this.averageHoverTime,
-            this.hoverToClickRate,
-            this.hoverToClickTime,
-            this.timeBeforeClick,
-            this.timeBeforeHover
-        ];
-
         let returnObj = {};
 
         this.leaves.forEach(leaf => {
-            returnObj[leaf] = {
-                visitorClickRate: array[0][leaf],
-                averageHoverTime: array[1][leaf],
-                hoverToClickRate: array[2][leaf],
-                hoverToClickTime: array[3][leaf],
-                timeBeforeClick: array[4][leaf],
-                timeBeforeHover: array[5][leaf]
-            };
-        })
-
+            returnObj[leaf] = this.getElementData(leaf);
+        });
         
         return returnObj;
     }
@@ -244,7 +291,7 @@ class rrwebDataMiner{
         return {
             ...this.parsedData[id],
             averageHoverTime: +(Stats.mean(this.parsedData[id].hoverDurTimes)).toPrecision(2),
-            visitorClickRate: +(this.parsedData[id].visitorClicks / this.config.sessions.length * 100).toPrecision(2),
+            visitorClickRate: +(this.parsedData[id].visitorClicks / this.sessions.length * 100).toPrecision(2),
             hoverToClickRate: +(this.parsedData[id].hoverAndClick / this.parsedData[id].hovers * 100).toPrecision(2),
             hoverToClickTime: +(Stats.mean(this.parsedData[id].hoverToClickTimes)).toPrecision(2),
             timeBeforeClick: +(Stats.mean(this.parsedData[id].clickTimes)).toPrecision(2),
@@ -253,7 +300,7 @@ class rrwebDataMiner{
     }
 
     get getSnapshot(){
-        return this.snapshot;
+        return this.sessions[0][3].data.node;
     }
 
     get speeds(){

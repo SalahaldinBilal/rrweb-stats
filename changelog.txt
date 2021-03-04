@@ -1,0 +1,42 @@
+-creating a new rrwebDataMiner no longer forces the user to enter the sessions at construction time.
+
+-object now only storing sessions, wanted leaf types, leaves and the parsed data.
+
+-various removals and rewrites.
+
+-added new methods to rrwebDataMiner : 
+	-getMovementIntervals:
+		inputs : none.
+		returns : array of movement intervals for each session.
+		description : to get movement intervals.
+		
+	-getClickIntervals:
+		inputs : timeThreshold(in seconds) - default: 0.5.
+		returns : array of click intervals for each session.
+		description : to get click intervals. 
+		
+	-getThrashingInfoOfMovInterval:
+		inputs : movement, winSize, threshold.
+		reutrns : object housing the probability, and thrashing period.
+		description : to calcualte probability of thrashing for a single movement event.
+		
+	-getThrashingInfoOfSessionMovements:
+		inputs : winSize, threshold.
+		returns : an array of sessions, each containing its thrashing probabilites.
+		description : goes through every movement in every session and runs "getThrashingInfoOfMovInterval" on it.
+		
+	-addSession:
+		inputs : session, updateStats - default : true.
+		return : void
+		description : adds a session to the list of sessions, and updates stats depending on "updateStats".
+		
+	-addSessions:
+		inputs : sessions, updateStats - default : true.
+		return : void
+		description : adds sessions to the list of sessions, and updates stats depending on "updateStats".
+		
+	-calculateStatstics:
+		inputs : none.
+		return : void
+		description : to get the prased data, MUST be run before getting leaves, prased data or snapshot, or before calling any method using parsed/calculated data.
+		
