@@ -1,3 +1,36 @@
+11/3/2021:
+stats.js:
+	new methods:
+	-shannonEntropy:
+		inputs: list of probabilites, formula.
+		return: shannon entropy value.
+		description: calcualtes the shannon entropy of a list of probabilites.
+
+rrwebDataMiner.js:
+	new methods : 
+		-findAbandonedForms:
+			inputs : session.
+			returns : from id and whether it was abandoned or not (object).
+			description : gets all forms from a session and checks if they're abandoned or not.
+		-_findForms:
+			inputs : none.
+			returns : form id and the id of all its children.
+			description : gets all the forms and their children from the page.
+		-_probabilityForEachClick:
+			inputs : click interval.
+			returns : probability for each element click (num of times element clicked/total nubmer of clicks).
+			description: get the click probability for each element in a click interval.
+		-isIntervalRageOrDeadClick:
+			inputs : click interval, threshold.
+			returns : enum intervalType.
+			description : checks if the interval was rage clicks or dead clicks depends on the entropy threshold.
+		-checkClickIntervals:
+			inputs : entropy threshold, click threshold (default 0.5).
+			returns : array similar to getClickIntervals, but instead of intervals, it will contain wether the interval was rage or dead clicks.
+			description : moves through all the click intervals of every session and tells if they're rage or dead clicks.
+
+
+4/3/2021:
 -creating a new rrwebDataMiner no longer forces the user to enter the sessions at construction time.
 
 -object now only storing sessions, wanted leaf types, leaves and the parsed data.

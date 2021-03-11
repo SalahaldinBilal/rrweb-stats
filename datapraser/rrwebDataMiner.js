@@ -1,4 +1,4 @@
-import {IncrementalSource, MouseInteractions} from '/node_modules/rrweb/es/rrweb/src/types.js'
+import {IncrementalSource, MouseInteractions, EventType} from '/node_modules/rrweb/es/rrweb/src/types.js'
 import {Stats} from './stats.js'
 
 function sortObject(object){
@@ -16,6 +16,12 @@ const eventTypes = {};
     eventTypes[eventTypes["mouseLeave"] = 2] = "mouseLeave";
     eventTypes[eventTypes["click"] = 3] = "click";
 })(eventTypes);
+
+const intervalType = {};
+(function(intervalType){
+    intervalType[intervalType["rageClick"] = 0] = "rageClick";
+    intervalType[intervalType["deadClick"] = 1] = "deadClick";
+})(intervalType);
 
 class rrwebDataMiner{
     constructor(sessions, leafTypes){
@@ -130,6 +136,74 @@ class rrwebDataMiner{
     
         findLeavesRecursive(this.getSnapshot);
         return leaves;
+    }
+
+    _findForms(){
+        let forms = {};
+
+        function getFormChildren(form, node){
+            form.add(node.id);
+            if(node.childNodes) node.childNodes.forEach(child => getFormChildren(form, child));
+        }
+
+        function findFormsRecursive(node){
+            if(node.tagName)
+                if(node.tagName === "form") {
+                    forms[node.id] = new Set()
+                    getFormChildren(forms[node.id], node)
+                }
+                else node.childNodes.forEach(child => findFormsRecursive(child));
+        }
+
+        findFormsRecursive(this.getSnapshot.childNodes[1]);
+        return forms;
+    }
+
+    _probabilityForEachClick(interval){
+        let elementCount = {};
+        let probablities = {};
+        for(const clickEvent of interval){
+            if(elementCount.hasOwnProperty(clickEvent.data.id)) elementCount[clickEvent.data.id]++;
+            else{
+                elementCount[clickEvent.data.id] = 0;
+            }
+        }
+        
+        for(const element in elementCount) probablities[element] = elementCount[element] / interval.length;
+        return probablities;
+    }
+
+    isIntervalRageOrDeadClick(interval, threshold){
+        return Stats.shannonEntropy(this._probabilityForEachClick(interval)) <= threshold ? intervalType.deadClick : intervalType.rageClick;
+    }
+
+    checkClickIntervals(entropyThreshold, clickThreshold = 0.5){
+        return this.getClickIntervals(clickThreshold).map(e => e.map(a => this.isIntervalRageOrDeadClick(a, entropyThreshold)))
+    }
+
+    findAbandonedForms(session){
+        if(!session) throw new Error("Please provide a correct session");
+
+        let forms = this._findForms();
+        let abandonedForms = {};
+
+        for(const key in forms) abandonedForms[key] = true;
+
+        function anyAbandoned(){
+            for(const form in abandonedForms) 
+                if(abandonedForms[form] === true) return true;
+            return false; 
+        }
+
+        for(const event of session){
+            if(event.type === EventType.IncrementalSnapshot && event.data.source !== IncrementalSource.MouseMove){
+                for(const form in abandonedForms)
+                    if(forms[form].has(event.data.id)) abandonedForms[form] = false;
+                if(!anyAbandoned()) return abandonedForms;
+            }
+        }
+
+        return abandonedForms;
     }
 
     getMovementIntervals(){
@@ -308,4 +382,4 @@ class rrwebDataMiner{
     }
 };
 
-export {rrwebDataMiner, eventTypes};
+export {rrwebDataMiner, eventTypes, intervalType};

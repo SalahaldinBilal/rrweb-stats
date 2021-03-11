@@ -29,6 +29,15 @@ fetch("/src/data/recordings.json")
                 map[leaf].classList.remove("showing-data");
             });
         }     
-        console.log(dp.getThrashingInfoOfSessionMovements(3, 3000));
+        console.log(dp.getClickIntervals(0.5));
+        console.log(dp.checkClickIntervals(0.5, 0.5));
     })
     //code was run on a local server using local-server package in node
+var formsdp = new rrwebDataMiner();
+fetch("/src/data/form-recordings.json")
+    .then(response => response.json())
+    .then(json => {
+        formsdp.addSessions(json, false);
+        for(const session of json)
+            console.log(formsdp.findAbandonedForms(session));
+    })

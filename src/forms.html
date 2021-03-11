@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body{
+            margin: 0;
+        }
+        form{
+            border:1px solid black;
+            width:45%;
+            display:inline-block;
+            margin: 0 5px;
+            padding:10px;
+        }
+        div{
+            margin:10px;
+            padding:5px;
+            border:1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <form>
+        <h2>First Form</h2>
+        <input type="text">
+        <button type="button">First form button</button>
+    </form>
+    <form>
+        <h2>Second Form</h2>
+        <input type="text">
+        <button type="button">Second form button</button>
+    </form>
+    <div>
+        i am not a form !!!!
+        <button>normal button</button>
+        <p>Lorem, ipsum dolor sit amet consectetur adipisicing elit. Aspernatur debitis molestiae, ullam cupiditate, in iste nesciunt tenetur voluptatum atque explicabo impedit quisquam, magni repellat accusantium totam consectetur ut commodi dignissimos.</p>
+    </div>
+    <script src="/node_modules/rrweb/dist/rrweb.js"></script>
+    <script>
+        let events = []
+        rrweb.record({
+            emit(event) {
+                events.push(event)
+            }
+        })
+    </script>
+</body>
+</html>
