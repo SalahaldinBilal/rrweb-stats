@@ -275,12 +275,14 @@ class rrwebDataMiner{
                     if(lastClick && calculateTimeDifference(lastClick.timestamp, event.timestamp) <= timeThreshold) {
                         if(interval.length === 0) interval.push(lastClick)
                         interval.push(event);
-                        lastClick = event;
+                        //lastClick = event;
                     }
                     else if(interval.length > 0){
                         intervals[intervals.length - 1].push(interval);
                         interval = [];
                     }
+                    if(lastClick)
+                    console.log(event, calculateTimeDifference(lastClick.timestamp, event.timestamp))
                     lastClick = event;
                 }
             }
